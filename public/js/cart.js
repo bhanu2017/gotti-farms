@@ -1,4 +1,4 @@
-import { renderLayout, api, esc, money, cart, toast, payWithRazorpay, $, $$ } from '/js/app.js';
+import { renderLayout, api, esc, money, cart, toast, payWithRazorpay, myOrders, $, $$ } from '/js/app.js';
 
 const root = $('#cart-root');
 const CUSTOMER_KEY = 'gf_customer';
@@ -130,6 +130,7 @@ async function refreshProducts() {
 }
 
 function goToOrder(order, phone) {
+  myOrders.add(order.order_number, phone);
   cart.clear();
   sessionStorage.setItem('gf_last_order', JSON.stringify({ no: order.order_number, phone }));
   location.href = `/track?order=${encodeURIComponent(order.order_number)}&placed=1`;
@@ -186,6 +187,7 @@ async function placeOrder() {
       method: 'POST',
       body: { items: cart.items().map(({ id, qty }) => ({ id, qty })), customer: { ...data, phone }, paymentMethod },
     });
+    myOrders.add(res.order.order_number, phone);
     if (res.payment) {
       pending = { payment: res.payment, orderNumber: res.order.order_number, cartKey: JSON.stringify(cart.items()) };
       await startPayment(res.payment, res.order.order_number, phone);
@@ -222,4 +224,6 @@ root.addEventListener('change', (e) => { if (e.target.name === 'pay') renderSumm
   cfg = await renderLayout('cart');
   try { await refreshProducts(); } catch (err) { root.innerHTML = `<p class="warn">${esc(err.message)}</p>`; return; }
   render();
+  const note = sessionStorage.getItem('gf_cart_note');
+  if (note && $('#checkout-alert')) { showAlert(esc(note), 'info'); sessionStorage.removeItem('gf_cart_note'); }
 })();

@@ -1,13 +1,9 @@
 import crypto from 'node:crypto';
-import { db, tx } from './db.js';
+import { all, one, exec, tx } from './db.js';
 import { config } from './config.js';
+import { HttpError } from './errors.js';
 
-export class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
+export { HttpError };
 
 // ---------------- Products & categories ----------------
 
@@ -15,9 +11,9 @@ const productColumns = `p.id, p.name, p.category_id, c.name AS category_name, p.
   p.description, p.stock, p.featured, p.active, p.created_at`;
 
 export function listCategories() {
-  return db.prepare(`
-    SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id AND p.active = 1) AS product_count
-    FROM categories c ORDER BY c.sort_order, c.name`).all();
+  return all(`
+    SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id AND p.active = 1)::int AS product_count
+    FROM categories c ORDER BY c.sort_order, c.name`);
 }
 
 export function listProducts({ category, q, featured, ids, sort, includeInactive = false } = {}) {
@@ -26,30 +22,29 @@ export function listProducts({ category, q, featured, ids, sort, includeInactive
   if (!includeInactive) where.push('p.active = 1');
   if (category) { where.push('p.category_id = ?'); params.push(category); }
   if (featured) where.push('p.featured = 1');
-  if (q) { where.push('(p.name LIKE ? OR p.description LIKE ? OR c.name LIKE ?)'); const like = `%${q}%`; params.push(like, like, like); }
+  if (q) { where.push('(p.name ILIKE ? OR p.description ILIKE ? OR c.name ILIKE ?)'); const like = `%${q}%`; params.push(like, like, like); }
   if (ids?.length) { where.push(`p.id IN (${ids.map(() => '?').join(',')})`); params.push(...ids); }
   const order = { price_asc: 'p.price ASC', price_desc: 'p.price DESC', name: 'p.name ASC', newest: 'p.created_at DESC' }[sort]
     || 'p.featured DESC, p.id ASC';
-  const sql = `SELECT ${productColumns} FROM products p JOIN categories c ON c.id = p.category_id
-               ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY ${order}`;
-  return db.prepare(sql).all(...params);
+  return all(`SELECT ${productColumns} FROM products p JOIN categories c ON c.id = p.category_id
+              ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY ${order}`, params);
 }
 
 export function getProduct(id) {
-  return db.prepare(`SELECT ${productColumns} FROM products p JOIN categories c ON c.id = p.category_id WHERE p.id = ?`).get(id);
+  return one(`SELECT ${productColumns} FROM products p JOIN categories c ON c.id = p.category_id WHERE p.id = ?`, [id]);
 }
 
-function cleanProduct(input) {
+async function cleanProduct(input) {
   const name = String(input.name ?? '').trim();
   const category_id = String(input.category_id ?? '').trim();
   const priceRupees = Number(input.price_rupees);
   const unit = String(input.unit ?? '').trim();
   const stock = Number(input.stock);
   if (name.length < 2 || name.length > 120) throw new HttpError(400, 'Product name must be 2–120 characters.');
-  if (!db.prepare('SELECT 1 FROM categories WHERE id = ?').get(category_id)) throw new HttpError(400, 'Choose a valid category.');
+  if (!(await one('SELECT 1 AS ok FROM categories WHERE id = ?', [category_id]))) throw new HttpError(400, 'Choose a valid category.');
   if (!Number.isFinite(priceRupees) || priceRupees <= 0 || priceRupees > 1_000_000) throw new HttpError(400, 'Enter a price greater than ₹0.');
   if (!unit || unit.length > 30) throw new HttpError(400, 'Enter a unit, for example kg or pack.');
-  if (!Number.isInteger(stock) || stock < 0) throw new HttpError(400, 'Stock must be a whole number, 0 or more.');
+  if (!Number.isInteger(stock) || stock < 0 || stock > 1_000_000) throw new HttpError(400, 'Stock must be a whole number, 0 or more.');
   const image = String(input.image ?? '').trim();
   if (image && !/^(\/(images|uploads)\/[\w.\-]+|https:\/\/\S+)$/.test(image)) throw new HttpError(400, 'Image must be an uploaded image or an https:// link.');
   return {
@@ -61,39 +56,41 @@ function cleanProduct(input) {
   };
 }
 
-export function createProduct(input) {
-  const p = cleanProduct(input);
-  const r = db.prepare(`INSERT INTO products (name, category_id, price, unit, image, description, stock, featured, active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(p.name, p.category_id, p.price, p.unit, p.image, p.description, p.stock, p.featured, p.active);
-  return getProduct(r.lastInsertRowid);
+export async function createProduct(input) {
+  const p = await cleanProduct(input);
+  const row = await one(`INSERT INTO products (name, category_id, price, unit, image, description, stock, featured, active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+  [p.name, p.category_id, p.price, p.unit, p.image, p.description, p.stock, p.featured, p.active]);
+  return getProduct(row.id);
 }
 
-export function updateProduct(id, input) {
-  if (!getProduct(id)) throw new HttpError(404, 'Product not found.');
-  const p = cleanProduct(input);
-  db.prepare(`UPDATE products SET name=?, category_id=?, price=?, unit=?, image=?, description=?, stock=?, featured=?, active=? WHERE id=?`)
-    .run(p.name, p.category_id, p.price, p.unit, p.image, p.description, p.stock, p.featured, p.active, id);
+export async function updateProduct(id, input) {
+  if (!(await getProduct(id))) throw new HttpError(404, 'Product not found.');
+  const p = await cleanProduct(input);
+  await exec('UPDATE products SET name=?, category_id=?, price=?, unit=?, image=?, description=?, stock=?, featured=?, active=? WHERE id=?',
+    [p.name, p.category_id, p.price, p.unit, p.image, p.description, p.stock, p.featured, p.active, id]);
   return getProduct(id);
 }
 
-export function deleteProduct(id) {
+export async function deleteProduct(id) {
   // Past orders keep their own copy of name and price, so deleting is safe.
-  const r = db.prepare('DELETE FROM products WHERE id = ?').run(id);
-  if (!r.changes) throw new HttpError(404, 'Product not found.');
+  const r = await exec('DELETE FROM products WHERE id = ?', [id]);
+  if (!r.rowCount) throw new HttpError(404, 'Product not found.');
 }
 
 // ---------------- Orders ----------------
 
 const ORDER_STATUSES = ['pending_payment', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled'];
 
-function newOrderNumber() {
+async function newOrderNumber() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const d = new Date();
-  const date = `${String(d.getFullYear()).slice(2)}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  // Date in India time
+  const d = new Date(Date.now() + 5.5 * 3600 * 1000);
+  const date = `${String(d.getUTCFullYear()).slice(2)}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
   for (;;) {
     const rand = Array.from(crypto.randomBytes(5), (b) => alphabet[b % alphabet.length]).join('');
     const num = `GF${date}-${rand}`;
-    if (!db.prepare('SELECT 1 FROM orders WHERE order_number = ?').get(num)) return num;
+    if (!(await one('SELECT 1 AS ok FROM orders WHERE order_number = ?', [num]))) return num;
   }
 }
 
@@ -123,7 +120,7 @@ export function deliveryFeeFor(subtotal) {
  * Validate cart against current prices and stock, then save the order.
  * Prices always come from the database, never from the browser.
  */
-export function createOrder({ items, customer, paymentMethod }) {
+export async function createOrder({ items, customer, paymentMethod }) {
   const c = validateCustomer(customer);
   if (!['online', 'cod'].includes(paymentMethod)) throw new HttpError(400, 'Choose a payment method.');
   if (paymentMethod === 'cod' && !config.codEnabled) throw new HttpError(400, 'Cash on delivery is not available right now.');
@@ -133,10 +130,10 @@ export function createOrder({ items, customer, paymentMethod }) {
   const qtyById = new Map();
   for (const it of items) {
     const id = Number(it?.id); const qty = Number(it?.qty);
-    if (!Number.isInteger(id) || !Number.isInteger(qty) || qty < 1 || qty > 99) throw new HttpError(400, 'Cart has an invalid item. Refresh the page and try again.');
+    if (!Number.isInteger(id) || id < 1 || !Number.isInteger(qty) || qty < 1 || qty > 99) throw new HttpError(400, 'Cart has an invalid item. Refresh the page and try again.');
     qtyById.set(id, (qtyById.get(id) || 0) + qty);
   }
-  const products = listProducts({ ids: [...qtyById.keys()] });
+  const products = await listProducts({ ids: [...qtyById.keys()] });
   const lines = [];
   for (const [id, qty] of qtyById) {
     const p = products.find((x) => x.id === id);
@@ -149,58 +146,59 @@ export function createOrder({ items, customer, paymentMethod }) {
   const total = subtotal + delivery_fee;
   if (paymentMethod === 'online' && total < 100) throw new HttpError(400, 'Order total is too small for online payment.');
 
-  return tx(() => {
-    const order_number = newOrderNumber();
+  const order_number = await newOrderNumber();
+  return tx(async () => {
     const isCod = paymentMethod === 'cod';
-    const r = db.prepare(`INSERT INTO orders (order_number, customer_name, phone, email, address, city, state, pincode, notes,
+    const row = await one(`INSERT INTO orders (order_number, customer_name, phone, email, address, city, state, pincode, notes,
         subtotal, delivery_fee, total, payment_method, payment_status, order_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(order_number, c.name, c.phone, c.email, c.address, c.city, c.state, c.pincode, c.notes,
-        subtotal, delivery_fee, total, paymentMethod, isCod ? 'cod' : 'pending', isCod ? 'confirmed' : 'pending_payment');
-    const orderId = Number(r.lastInsertRowid);
-    const ins = db.prepare(`INSERT INTO order_items (order_id, product_id, name, unit, image, price, qty, line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-    for (const l of lines) ins.run(orderId, l.product.id, l.product.name, l.product.unit, l.product.image, l.product.price, l.qty, l.line_total);
-    if (isCod) deductStock(orderId, { strict: true });
-    return getOrderById(orderId);
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    [order_number, c.name, c.phone, c.email, c.address, c.city, c.state, c.pincode, c.notes,
+      subtotal, delivery_fee, total, paymentMethod, isCod ? 'cod' : 'pending', isCod ? 'confirmed' : 'pending_payment']);
+    for (const l of lines) {
+      await exec('INSERT INTO order_items (order_id, product_id, name, unit, image, price, qty, line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [row.id, l.product.id, l.product.name, l.product.unit, l.product.image, l.product.price, l.qty, l.line_total]);
+    }
+    if (isCod) await deductStock(row.id, { strict: true });
+    return getOrderById(row.id);
   });
 }
 
 /** Reduce stock for an order's items. strict = fail if not enough (used before payment is taken). */
-function deductStock(orderId, { strict }) {
-  const items = db.prepare('SELECT product_id, qty, name FROM order_items WHERE order_id = ?').all(orderId);
+async function deductStock(orderId, { strict }) {
+  const items = await all('SELECT product_id, qty, name FROM order_items WHERE order_id = ?', [orderId]);
   for (const it of items) {
     if (strict) {
-      const r = db.prepare('UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?').run(it.qty, it.product_id, it.qty);
-      if (!r.changes) throw new HttpError(409, `${it.name} just sold out. Lower the quantity or remove it.`);
+      const r = await exec('UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?', [it.qty, it.product_id, it.qty]);
+      if (!r.rowCount) throw new HttpError(409, `${it.name} just sold out. Lower the quantity or remove it.`);
     } else {
       // Payment already taken: never block, just floor at zero.
-      db.prepare('UPDATE products SET stock = MAX(stock - ?, 0) WHERE id = ?').run(it.qty, it.product_id);
+      await exec('UPDATE products SET stock = GREATEST(stock - ?, 0) WHERE id = ?', [it.qty, it.product_id]);
     }
   }
-  db.prepare('UPDATE orders SET stock_deducted = 1 WHERE id = ?').run(orderId);
+  await exec('UPDATE orders SET stock_deducted = 1 WHERE id = ?', [orderId]);
 }
 
-function restoreStock(orderId) {
-  const items = db.prepare('SELECT product_id, qty FROM order_items WHERE order_id = ?').all(orderId);
-  for (const it of items) db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?').run(it.qty, it.product_id);
-  db.prepare('UPDATE orders SET stock_deducted = 0 WHERE id = ?').run(orderId);
+async function restoreStock(orderId) {
+  const items = await all('SELECT product_id, qty FROM order_items WHERE order_id = ?', [orderId]);
+  for (const it of items) await exec('UPDATE products SET stock = stock + ? WHERE id = ?', [it.qty, it.product_id]);
+  await exec('UPDATE orders SET stock_deducted = 0 WHERE id = ?', [orderId]);
 }
 
-export function getOrderById(id) {
-  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+export async function getOrderById(id) {
+  const order = await one('SELECT * FROM orders WHERE id = ?', [id]);
   if (!order) return null;
-  order.items = db.prepare('SELECT product_id, name, unit, image, price, qty, line_total FROM order_items WHERE order_id = ?').all(id);
+  order.items = await all('SELECT product_id, name, unit, image, price, qty, line_total FROM order_items WHERE order_id = ? ORDER BY id', [id]);
   return order;
 }
 
-export function getOrderByNumber(orderNumber) {
-  const row = db.prepare('SELECT id FROM orders WHERE order_number = ?').get(String(orderNumber ?? '').trim().toUpperCase());
+export async function getOrderByNumber(orderNumber) {
+  const row = await one('SELECT id FROM orders WHERE order_number = ?', [String(orderNumber ?? '').trim().toUpperCase()]);
   return row ? getOrderById(row.id) : null;
 }
 
 /** Order lookup for customers: needs order number + the phone used on the order. */
-export function findCustomerOrder(orderNumber, phone) {
-  const order = getOrderByNumber(orderNumber);
+export async function findCustomerOrder(orderNumber, phone) {
+  const order = await getOrderByNumber(orderNumber);
   if (!order || order.phone !== normalizePhone(phone)) throw new HttpError(404, 'No order matches that order number and mobile number.');
   return order;
 }
@@ -215,24 +213,24 @@ export function publicOrder(o) {
   };
 }
 
-export function setRazorpayOrderId(orderId, rzpOrderId) {
-  db.prepare("UPDATE orders SET razorpay_order_id = ?, updated_at = datetime('now') WHERE id = ?").run(rzpOrderId, orderId);
+export async function setRazorpayOrderId(orderId, rzpOrderId) {
+  await exec('UPDATE orders SET razorpay_order_id = ?, updated_at = now() WHERE id = ?', [rzpOrderId, orderId]);
 }
 
-export function markPaymentFailedToStart(orderId) {
-  db.prepare("UPDATE orders SET payment_status = 'failed', order_status = 'cancelled', updated_at = datetime('now') WHERE id = ?").run(orderId);
+export async function markPaymentFailedToStart(orderId) {
+  await exec("UPDATE orders SET payment_status = 'failed', order_status = 'cancelled', updated_at = now() WHERE id = ?", [orderId]);
 }
 
 /** Mark an online order paid. Safe to call more than once (checkout callback + webhook). */
 export function markPaid(razorpayOrderId, razorpayPaymentId) {
-  return tx(() => {
-    const order = db.prepare('SELECT * FROM orders WHERE razorpay_order_id = ?').get(razorpayOrderId);
+  return tx(async () => {
+    const order = await one('SELECT * FROM orders WHERE razorpay_order_id = ? FOR UPDATE', [razorpayOrderId]);
     if (!order) return null;
     if (order.payment_status !== 'paid') {
       const nextStatus = order.order_status === 'pending_payment' || order.order_status === 'cancelled' ? 'confirmed' : order.order_status;
-      db.prepare(`UPDATE orders SET payment_status = 'paid', order_status = ?, razorpay_payment_id = ?, updated_at = datetime('now') WHERE id = ?`)
-        .run(nextStatus, razorpayPaymentId || '', order.id);
-      if (!order.stock_deducted) deductStock(order.id, { strict: false });
+      await exec("UPDATE orders SET payment_status = 'paid', order_status = ?, razorpay_payment_id = ?, updated_at = now() WHERE id = ?",
+        [nextStatus, razorpayPaymentId || '', order.id]);
+      if (!order.stock_deducted) await deductStock(order.id, { strict: false });
     }
     return getOrderById(order.id);
   });
@@ -240,40 +238,43 @@ export function markPaid(razorpayOrderId, razorpayPaymentId) {
 
 // ---------------- Admin ----------------
 
-export function adminListOrders({ status, q, limit = 100, offset = 0 } = {}) {
+export async function adminListOrders({ status, q, limit = 100, offset = 0 } = {}) {
   const where = []; const params = [];
   if (status && ORDER_STATUSES.includes(status)) { where.push('order_status = ?'); params.push(status); }
-  if (q) { where.push('(order_number LIKE ? OR customer_name LIKE ? OR phone LIKE ?)'); const like = `%${q}%`; params.push(like, like, like); }
-  return db.prepare(`SELECT id, order_number, customer_name, phone, city, total, payment_method, payment_status, order_status, created_at,
-      (SELECT SUM(qty) FROM order_items WHERE order_id = orders.id) AS item_count
-      FROM orders ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC LIMIT ? OFFSET ?`)
-    .all(...params, Math.min(Number(limit) || 100, 500), Number(offset) || 0);
+  if (q) { where.push('(order_number ILIKE ? OR customer_name ILIKE ? OR phone ILIKE ?)'); const like = `%${q}%`; params.push(like, like, like); }
+  const rows = await all(`SELECT id, order_number, customer_name, phone, city, total, payment_method, payment_status, order_status, created_at,
+      (SELECT SUM(qty) FROM order_items WHERE order_id = orders.id)::int AS item_count
+      FROM orders ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC LIMIT ? OFFSET ?`,
+  [...params, Math.min(Number(limit) || 100, 500), Math.max(Number(offset) || 0, 0)]);
+  return rows.map((r) => ({ ...r, item_count: Number(r.item_count) || 0 }));
 }
 
 export function adminUpdateOrderStatus(id, status) {
   if (!ORDER_STATUSES.includes(status) || status === 'pending_payment') throw new HttpError(400, 'Choose a valid status.');
-  return tx(() => {
-    const order = getOrderById(id);
-    if (!order) throw new HttpError(404, 'Order not found.');
+  return tx(async () => {
+    const locked = await one('SELECT id FROM orders WHERE id = ? FOR UPDATE', [id]);
+    if (!locked) throw new HttpError(404, 'Order not found.');
+    const order = await getOrderById(id);
     if (order.order_status === 'cancelled') throw new HttpError(400, 'This order is cancelled and can no longer be changed.');
     if (order.order_status === 'pending_payment' && status !== 'cancelled') {
       throw new HttpError(400, 'This order has not been paid yet. You can only cancel it.');
     }
     let paymentStatus = order.payment_status;
     if (status === 'delivered' && order.payment_method === 'cod') paymentStatus = 'paid'; // cash collected
-    db.prepare("UPDATE orders SET order_status = ?, payment_status = ?, updated_at = datetime('now') WHERE id = ?").run(status, paymentStatus, id);
-    if (status === 'cancelled' && order.stock_deducted) restoreStock(id);
+    await exec('UPDATE orders SET order_status = ?, payment_status = ?, updated_at = now() WHERE id = ?', [status, paymentStatus, id]);
+    if (status === 'cancelled' && order.stock_deducted) await restoreStock(id);
     return getOrderById(id);
   });
 }
 
-export function adminStats() {
-  const one = (sql) => db.prepare(sql).get();
+export async function adminStats() {
+  const n = async (sql) => Number((await one(sql))?.n) || 0;
   return {
-    orders_today: one("SELECT COUNT(*) AS n FROM orders WHERE date(created_at) = date('now') AND order_status != 'pending_payment'").n,
-    to_ship: one("SELECT COUNT(*) AS n FROM orders WHERE order_status IN ('confirmed','packed')").n,
-    revenue_30d: one("SELECT COALESCE(SUM(total),0) AS n FROM orders WHERE payment_status = 'paid' AND created_at >= datetime('now','-30 days')").n,
-    awaiting_payment: one("SELECT COUNT(*) AS n FROM orders WHERE order_status = 'pending_payment'").n,
-    low_stock: db.prepare('SELECT id, name, stock, unit FROM products WHERE active = 1 AND stock <= 10 ORDER BY stock').all(),
+    orders_today: await n(`SELECT COUNT(*) AS n FROM orders
+      WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date AND order_status != 'pending_payment'`),
+    to_ship: await n("SELECT COUNT(*) AS n FROM orders WHERE order_status IN ('confirmed','packed')"),
+    revenue_30d: await n("SELECT COALESCE(SUM(total),0) AS n FROM orders WHERE payment_status = 'paid' AND created_at >= now() - interval '30 days'"),
+    awaiting_payment: await n("SELECT COUNT(*) AS n FROM orders WHERE order_status = 'pending_payment'"),
+    low_stock: await all('SELECT id, name, stock, unit FROM products WHERE active = 1 AND stock <= 10 ORDER BY stock'),
   };
 }

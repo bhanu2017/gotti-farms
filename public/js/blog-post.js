@@ -1,4 +1,4 @@
-import { renderLayout, api, esc, icon, getConfig, $ } from '/js/app.js';
+import { renderLayout, api, esc, icon, getConfig, $, toDate } from '/js/app.js';
 import { getLang, setLang, TOPICS, T, langToggle, postCard, localize, renderBody, readMinutes } from '/js/blog-common.js';
 
 const root = $('#article');
@@ -6,7 +6,7 @@ const slug = decodeURIComponent(location.pathname.replace(/^\/blog\//, '').repla
 let lang = getLang();
 let post; let related = []; let cfg;
 
-const fmtDate = (s, l) => new Date(s.replace(' ', 'T') + 'Z')
+const fmtDate = (s, l) => toDate(s)
   .toLocaleDateString(l === 'te' ? 'te-IN' : 'en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
 function render() {

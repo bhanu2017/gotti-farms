@@ -1,11 +1,11 @@
-import { api, esc, money, logoMark, STATUS_LABEL, PAYMENT_LABEL, toast, $, $$ } from '/js/app.js';
+import { api, esc, money, logoMark, STATUS_LABEL, PAYMENT_LABEL, toast, $, $$, toDate } from '/js/app.js';
 
 const root = $('#admin-root');
 let categories = [];
 let tab = 'orders';
 let orderFilter = { status: '', q: '' };
 
-const fmtDate = (s) => new Date(s.replace(' ', 'T') + 'Z').toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+const fmtDate = (s) => toDate(s).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
 const pillClass = (o) => (o.order_status === 'cancelled' ? 'bad' : o.order_status === 'pending_payment' ? 'warn-pill' : '');
 
 // ---------- Sign in ----------

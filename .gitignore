@@ -1,7 +1,5 @@
 node_modules/
 .env
-data/*.db*
-public/uploads/*
-!public/uploads/.gitkeep
+.netlify/
 .DS_Store
 .vscode/

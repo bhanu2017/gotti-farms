@@ -410,3 +410,22 @@ h1:lang(te), h2:lang(te), h3:lang(te) { line-height: 1.45; }
 .related { margin-top: 44px; }
 .related h2 { font-size: 1.35rem; font-weight: 600; margin-bottom: 16px; }
 .related .post-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+
+/* ============ My Orders ============ */
+.orders-title { font-size: clamp(1.7rem, 3vw, 2.1rem); font-weight: 600; margin-bottom: 2px; }
+.order-list { display: grid; gap: 16px; margin: 18px 0 28px; }
+.order-card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+.order-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.order-card-head h2 { font-size: 1.1rem; margin: 0 0 2px; }
+.pill-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.order-products { list-style: none; padding: 0; margin: 14px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.order-products li { display: flex; gap: 10px; align-items: center; background: var(--sage-100); border-radius: var(--radius-sm); padding: 8px; }
+.order-products img { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; flex: none; background: #fff; }
+.order-products li > span { display: flex; flex-direction: column; min-width: 0; font-size: .92rem; line-height: 1.35; }
+.order-products li b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.order-products li.more { justify-content: center; font-weight: 600; background: none; border: 1.5px dashed var(--line); }
+.order-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 12px; }
+.order-card-foot b { font-size: 1.1rem; }
+.btn-sm { padding: .5em 1em; font-size: .88rem; }
+.btn-outline.btn-sm { background: #fff; }
+.lookup-panel .form-grid { margin-top: 6px; }

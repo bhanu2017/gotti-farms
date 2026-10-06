@@ -1,0 +1,35 @@
+# Netlify settings for Gotti Farms
+
+[build]
+  publish = "public"          # the website files
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["pg"]
+
+# Article links like /blog/how-to-take-a-soil-sample are shown by blog-post.html
+[[redirects]]
+  from = "/blog/:slug"
+  to = "/blog-post.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Frame-Options = "SAMEORIGIN"
+
+[[headers]]
+  for = "/images/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  for = "/admin"
+  [headers.values]
+    X-Robots-Tag = "noindex"

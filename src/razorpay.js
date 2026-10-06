@@ -16,7 +16,7 @@ export async function createRazorpayOrder({ amount, receipt, notes }) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Basic ${auth}` },
     body: JSON.stringify({ amount, currency: 'INR', receipt, notes }),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(8000),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.id) {

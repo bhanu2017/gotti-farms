@@ -40,6 +40,12 @@ export function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+/** Parse a date from the API (ISO string or "YYYY-MM-DD HH:MM:SS" in UTC). */
+export function toDate(value) {
+  const s = String(value ?? '');
+  return new Date(/T|Z$|[+-]\d\d(:?\d\d)?$/.test(s) ? s : s.replace(' ', 'T') + 'Z');
+}
+
 /** Format paise as rupees: 12000 -> "₹120", 12050 -> "₹120.50" */
 export function money(paise) {
   const r = (paise || 0) / 100;
@@ -96,6 +102,18 @@ export const cart = {
   clear() { this.save([]); },
 };
 
+// Orders placed or looked up on this device, so "My Orders" can show them without typing.
+const ORDERS_KEY = 'gf_my_orders';
+export const myOrders = {
+  list() { return storageGet(ORDERS_KEY, []); },
+  add(no, phone) {
+    if (!no || !phone) return;
+    const rest = this.list().filter((o) => o.no !== no);
+    storageSet(ORDERS_KEY, [{ no, phone }, ...rest].slice(0, 20));
+  },
+  remove(no) { storageSet(ORDERS_KEY, this.list().filter((o) => o.no !== no)); },
+};
+
 const WISH_KEY = 'gf_saved';
 export const saved = {
   ids() { return storageGet(WISH_KEY, []); },
@@ -128,7 +146,7 @@ const NAV = [
   ['/shop', 'Products', 'shop'],
   ['/#process', 'Farming', 'farming'],
   ['/blog', 'Farmer Tips', 'blog'],
-  ['/track', 'Track Order', 'track'],
+  ['/track', 'My Orders', 'track'],
   ['#contact', 'Contact', 'contact'],
 ];
 
@@ -168,7 +186,7 @@ export async function renderLayout(active) {
           <button aria-label="Search">${icon.search}</button>
         </form>
         <div class="header-icons">
-          <a class="icon-btn" href="/track" aria-label="Track your order">${icon.user}</a>
+          <a class="icon-btn" href="/track" aria-label="My orders">${icon.user}</a>
           <a class="icon-btn" href="/cart" aria-label="Cart">${icon.cart}<span class="cart-count" id="cart-count">0</span></a>
         </div>
       </div></div>`;
@@ -199,7 +217,7 @@ export async function renderLayout(active) {
           </ul></div>
           <div><h4>Help</h4><ul>
             <li><a href="/blog">Farmer tips (English / తెలుగు)</a></li>
-            <li><a href="/track">Track your order</a></li>
+            <li><a href="/track">My orders</a></li>
             <li><a href="/cart">Your cart</a></li>
             <li><a href="/#about">About the farm</a></li>
           </ul></div>
