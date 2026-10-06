@@ -1,0 +1,12 @@
+{
+  "name": "gotti-farms",
+  "version": "1.0.0",
+  "description": "Gotti Farms online store: products, cart, Razorpay payments, cash on delivery and an admin panel.",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=22.13.0" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch server.js"
+  }
+}
