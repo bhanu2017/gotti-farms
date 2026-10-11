@@ -22,3 +22,19 @@ api('/api/posts?limit=3').then((posts) => {
   $('#tips-grid').innerHTML = posts.map((p) => postCard(p, getLang())).join('');
   $('#tips').hidden = false;
 }).catch(() => {});
+
+// Farm story video: the vertical version on phones, landscape on bigger screens.
+(() => {
+  const v = document.getElementById('farm-story');
+  if (!v) return;
+  const pick = () => {
+    const phone = window.matchMedia('(max-width: 640px)').matches;
+    const src = phone ? '/videos/farm-story-vertical.mp4' : '/videos/farm-story.mp4';
+    if (v.getAttribute('src') === src || !v.paused) return;
+    v.setAttribute('src', src);
+    v.setAttribute('poster', phone ? '/videos/farm-story-poster-vertical.jpg' : '/videos/farm-story-poster.jpg');
+    v.classList.toggle('is-vertical', phone);
+  };
+  pick();
+  window.matchMedia('(max-width: 640px)').addEventListener('change', pick);
+})();

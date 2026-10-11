@@ -33,3 +33,8 @@
   for = "/admin"
   [headers.values]
     X-Robots-Tag = "noindex"
+
+[[headers]]
+  for = "/videos/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"

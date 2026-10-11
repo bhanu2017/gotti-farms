@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shop farm fresh products | Gotti Farms</title>
+  <meta name="theme-color" content="#1b4d2b">
+  <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="page-head"><div class="wrap">
+      <h1 id="shop-title">All Products</h1>
+      <p id="shop-sub">Fresh from our fields and partner farmers</p>
+    </div></div>
+    <section class="section" style="padding-top:28px">
+      <div class="wrap">
+        <div class="shop-tools">
+          <div class="chips" id="chips" role="group" aria-label="Filter by category"></div>
+          <div class="field-inline">
+            <label class="sr-only" for="shop-q">Search</label>
+            <input class="input" id="shop-q" type="search" placeholder="Search products…" style="width:200px">
+            <label class="sr-only" for="sort">Sort by</label>
+            <select class="select" id="sort" style="width:auto">
+              <option value="">Recommended</option>
+              <option value="price_asc">Price: low to high</option>
+              <option value="price_desc">Price: high to low</option>
+              <option value="name">Name</option>
+              <option value="newest">Newest</option>
+            </select>
+          </div>
+        </div>
+        <div class="product-grid" id="grid" aria-live="polite"><p class="muted">Loading products…</p></div>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer"></div>
+  <script type="module" src="/js/shop.js"></script>
+</body>
+</html>

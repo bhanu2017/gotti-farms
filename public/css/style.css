@@ -429,3 +429,14 @@ h1:lang(te), h2:lang(te), h3:lang(te) { line-height: 1.45; }
 .btn-sm { padding: .5em 1em; font-size: .88rem; }
 .btn-outline.btn-sm { background: #fff; }
 .lookup-panel .form-grid { margin-top: 6px; }
+
+/* ============ Farm story video ============ */
+.video-frame {
+  max-width: 960px; margin: 0 auto; border-radius: 16px; overflow: hidden;
+  background: #0f2416; box-shadow: 0 10px 30px rgba(20, 61, 34, .18);
+}
+.video-frame video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #0f2416; }
+.video-frame video.is-vertical { aspect-ratio: 9 / 16; max-height: 80vh; margin: 0 auto; }
+@media (max-width: 640px) {
+  .video-frame { max-width: 420px; border-radius: 14px; }
+}

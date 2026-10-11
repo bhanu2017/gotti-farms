@@ -1,0 +1,15 @@
+{
+  "name": "gotti-farms",
+  "version": "2.0.0",
+  "description": "Gotti Farms online store on Netlify: products, cart, Razorpay payments, cash on delivery, admin panel and bilingual farmer blog.",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "netlify dev"
+  },
+  "dependencies": {
+    "@netlify/blobs": ">=8.1.0",
+    "pg": "^8.11.0"
+  }
+}
