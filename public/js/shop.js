@@ -1,4 +1,5 @@
-import { renderLayout, api, esc, mountProducts, saved, $ } from '/js/app.js';
+import { renderLayout, api, esc, mountProducts, saved, ssrData, $ } from '/js/app.js';
+import { shopChipsHtml, shopTitle, emptyShopHtml } from '/js/render.js';
 
 renderLayout('shop');
 
@@ -17,25 +18,25 @@ function syncUrl() {
 }
 
 function renderChips() {
-  const chip = (id, label) => `<button class="chip" type="button" data-cat="${esc(id)}" aria-pressed="${state.category === id}">${esc(label)}</button>`;
-  $('#chips').innerHTML = chip('', 'All') + categories.map((c) => chip(c.id, c.name)).join('') + chip('saved', 'Saved');
-  const cat = categories.find((c) => c.id === state.category);
-  $('#shop-title').textContent = state.category === 'saved' ? 'Saved products' : cat ? cat.name : state.q ? `Results for "${state.q}"` : 'All Products';
+  $('#chips').innerHTML = shopChipsHtml(categories, state.category);
+  $('#shop-title').innerHTML = shopTitle(state, categories);
 }
 
-function render() {
+function render({ hydrate = false } = {}) {
   const grid = $('#grid');
   let list = products;
   if (state.category === 'saved') list = products.filter((p) => saved.has(p.id));
   if (!list.length) {
-    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">
-      <h3>${state.category === 'saved' ? 'No saved products yet' : 'No products found'}</h3>
-      <p>${state.category === 'saved' ? 'Tap the heart on any product to save it here.' : 'Try another search or category.'}</p>
-      <button class="btn btn-outline" type="button" id="reset">Show all products</button></div>`;
-    $('#reset').onclick = () => { Object.assign(state, { category: '', q: '' }); $('#shop-q').value = ''; load(); };
+    grid.innerHTML = emptyShopHtml(state.category === 'saved');
+    $('#reset').addEventListener('click', (e) => {
+      e.preventDefault();
+      Object.assign(state, { category: '', q: '' });
+      $('#shop-q').value = '';
+      load();
+    });
     return;
   }
-  mountProducts(grid, list);
+  mountProducts(grid, list, { hydrate: hydrate && state.category !== 'saved' });
 }
 
 async function load() {
@@ -64,5 +65,18 @@ $('#shop-q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(
 $('#sort').addEventListener('change', (e) => { state.sort = e.target.value; load(); });
 $('#grid').addEventListener('saved:change', () => { if (state.category === 'saved') render(); });
 
-api('/api/categories').then((c) => { categories = c; renderChips(); }).catch(() => {});
-load();
+// First view: the server already drew the products (pages.mjs), so just switch on the buttons.
+const ssr = ssrData();
+if (ssr?.page === 'shop') {
+  categories = ssr.categories;
+  products = ssr.products;
+  Object.assign(state, ssr.query);
+  $('#shop-q').value = state.q;
+  $('#sort').value = state.sort;
+  syncUrl();
+  renderChips();
+  render({ hydrate: true });
+} else {
+  api('/api/categories').then((c) => { categories = c; renderChips(); }).catch(() => {});
+  load();
+}

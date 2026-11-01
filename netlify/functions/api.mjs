@@ -7,6 +7,17 @@ import * as blog from '../../src/blog.js';
 import { saveImage, imageResponse } from '../../src/files.js';
 import { createRazorpayOrder, verifyPaymentSignature, verifyWebhookSignature } from '../../src/razorpay.js';
 import { checkPassword, sessionCookie, clearCookie, isAdmin, rateLimited } from '../../src/auth.js';
+import { purgeCache } from '@netlify/functions';
+
+/** The home and shop pages are cached by Netlify (see pages.mjs); clear them after product changes. */
+async function purgeProductPages(tags = ['products']) {
+  try {
+    await purgeCache({ tags });
+  } catch (err) {
+    // Works only on Netlify; locally there is no cache to clear. Pages refresh within 60 s anyway.
+    if (process.env.NETLIFY_DEV !== 'true') console.warn('Could not clear the page cache:', err.message);
+  }
+}
 
 // ---------------- Tiny router ----------------
 const routes = [];
@@ -33,9 +44,25 @@ route('GET', '/api/config', () => ({
   freeDeliveryAbove: settings.freeDeliveryAbove,
   codEnabled: settings.codEnabled,
   onlinePaymentEnabled: razorpayEnabled(),
+  firstOrder: settings.firstOrder,
 }), { noDb: true });
 
-route('GET', '/api/categories', () => store.listCategories());
+// Checkout: preview a discount code before placing the order (the order is checked again).
+route('POST', '/api/coupon/check', async ({ body, ip }) => {
+  if (rateLimited(`coupon:${ip}`, 40, 10 * 60 * 1000)) throw new HttpError(429, 'Too many attempts. Wait a few minutes and try again.');
+  const subtotal = Math.max(0, Math.min(Number(body.subtotal) || 0, 100_000_000));
+  const r = await store.couponDiscount(body.code, body.phone, subtotal);
+  if (r.error) throw new HttpError(400, r.error);
+  return { code: r.code, discount: r.discount, percent: settings.firstOrder.percent, maxDiscount: settings.firstOrder.maxDiscount };
+});
+
+// First-order pop-up: save a WhatsApp number or email and return the discount code.
+route('POST', '/api/leads', ({ body, ip }) => {
+  if (rateLimited(`lead:${ip}`, 10, 10 * 60 * 1000)) throw new HttpError(429, 'Too many attempts. Wait a few minutes and try again.');
+  return store.saveLead({ contact: body.contact, source: body.source || 'first-order-popup' });
+});
+
+route('GET', '/api/categories', () => store.listCategories(), { cache: 'products' });
 
 route('GET', '/api/products', ({ query }) => {
   const ids = (query.get('ids') || '').split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 100);
@@ -46,13 +73,13 @@ route('GET', '/api/products', ({ query }) => {
     sort: query.get('sort') || undefined,
     ids: ids.length ? ids : undefined,
   });
-});
+}, { cache: 'products' });
 
 route('GET', '/api/products/:id', async ({ params }) => {
   const p = await store.getProduct(Number(params.id) || 0);
   if (!p || !p.active) throw new HttpError(404, 'Product not found.');
   return p;
-});
+}, { cache: 'products' });
 
 async function startOnlinePayment(order) {
   if (!razorpayEnabled()) throw new HttpError(503, 'Online payment is not set up yet. Choose cash on delivery.');
@@ -81,6 +108,7 @@ route('POST', '/api/orders', async ({ body, ip }) => {
   if (rateLimited(`order:${ip}`, 20, 10 * 60 * 1000)) throw new HttpError(429, 'Too many orders from this network. Wait a few minutes and try again.');
   if (body.paymentMethod === 'online' && !razorpayEnabled()) throw new HttpError(503, 'Online payment is not set up yet. Choose cash on delivery.');
   const order = await store.createOrder(body);
+  await purgeProductPages(); // stock changed: refresh the cached product lists
   const result = { order: store.publicOrder(order) };
   if (order.payment_method === 'online') {
     try {
@@ -148,13 +176,14 @@ route('GET', '/api/posts', ({ query }) => blog.listPosts({
   category: query.get('category') || undefined,
   q: (query.get('q') || '').trim().slice(0, 60) || undefined,
   limit: query.get('limit'),
-}));
+  section: ['recipes', 'tips'].includes(query.get('section')) ? query.get('section') : undefined,
+}), { cache: 'posts' });
 
 route('GET', '/api/posts/:slug', async ({ params }) => {
   const post = await blog.getPostBySlug(decodeURIComponent(params.slug));
   if (!post) throw new HttpError(404, 'This article does not exist or has been removed.');
   return post;
-});
+}, { cache: 'posts' });
 
 // ---------------- Admin API ----------------
 
@@ -168,6 +197,7 @@ route('POST', '/api/admin/login', ({ body, ip }) => {
 route('POST', '/api/admin/logout', () => ({ __headers: { 'Set-Cookie': clearCookie() }, ok: true }), { noDb: true });
 route('GET', '/api/admin/me', ({ req }) => ({ signedIn: isAdmin(req.headers.get('cookie')) }), { noDb: true });
 
+route('GET', '/api/admin/leads', ({ req }) => { requireAdmin(req); return store.adminListLeads(); });
 route('GET', '/api/admin/stats', ({ req }) => { requireAdmin(req); return store.adminStats(); });
 
 route('GET', '/api/admin/orders', ({ req, query }) => {
@@ -188,9 +218,24 @@ route('PATCH', '/api/admin/orders/:id', ({ req, params, body }) => {
 });
 
 route('GET', '/api/admin/products', ({ req }) => { requireAdmin(req); return store.listProducts({ includeInactive: true, sort: 'name' }); });
-route('POST', '/api/admin/products', ({ req, body }) => { requireAdmin(req); return store.createProduct(body); });
-route('PUT', '/api/admin/products/:id', ({ req, params, body }) => { requireAdmin(req); return store.updateProduct(Number(params.id) || 0, body); });
-route('DELETE', '/api/admin/products/:id', async ({ req, params }) => { requireAdmin(req); await store.deleteProduct(Number(params.id) || 0); return { ok: true }; });
+route('POST', '/api/admin/products', async ({ req, body }) => {
+  requireAdmin(req);
+  const product = await store.createProduct(body);
+  await purgeProductPages();
+  return product;
+});
+route('PUT', '/api/admin/products/:id', async ({ req, params, body }) => {
+  requireAdmin(req);
+  const product = await store.updateProduct(Number(params.id) || 0, body);
+  await purgeProductPages();
+  return product;
+});
+route('DELETE', '/api/admin/products/:id', async ({ req, params }) => {
+  requireAdmin(req);
+  await store.deleteProduct(Number(params.id) || 0);
+  await purgeProductPages();
+  return { ok: true };
+});
 
 route('GET', '/api/admin/posts', ({ req }) => { requireAdmin(req); return blog.listPosts({ includeDrafts: true }); });
 route('GET', '/api/admin/posts/:id', async ({ req, params }) => {
@@ -199,9 +244,9 @@ route('GET', '/api/admin/posts/:id', async ({ req, params }) => {
   if (!post) throw new HttpError(404, 'Post not found.');
   return post;
 });
-route('POST', '/api/admin/posts', ({ req, body }) => { requireAdmin(req); return blog.createPost(body); }, { bodyLimit: 512 * 1024 });
-route('PUT', '/api/admin/posts/:id', ({ req, params, body }) => { requireAdmin(req); return blog.updatePost(Number(params.id) || 0, body); }, { bodyLimit: 512 * 1024 });
-route('DELETE', '/api/admin/posts/:id', async ({ req, params }) => { requireAdmin(req); await blog.deletePost(Number(params.id) || 0); return { ok: true }; });
+route('POST', '/api/admin/posts', async ({ req, body }) => { requireAdmin(req); const p = await blog.createPost(body); await purgeProductPages(['posts']); return p; }, { bodyLimit: 512 * 1024 });
+route('PUT', '/api/admin/posts/:id', async ({ req, params, body }) => { requireAdmin(req); const p = await blog.updatePost(Number(params.id) || 0, body); await purgeProductPages(['posts']); return p; }, { bodyLimit: 512 * 1024 });
+route('DELETE', '/api/admin/posts/:id', async ({ req, params }) => { requireAdmin(req); await blog.deletePost(Number(params.id) || 0); await purgeProductPages(['posts']); return { ok: true }; });
 
 // Image upload as base64 JSON: { filename, data }
 route('POST', '/api/admin/upload', async ({ req, body }) => {
@@ -240,6 +285,15 @@ export default async function handler(req, context) {
     const result = match.opts.noDb ? await run() : await withRequestDb(run);
     const headers = result?.__headers || {};
     if (result?.__headers) delete result.__headers;
+    if (match.opts.cache && req.method === 'GET') {
+      // Public lists: Netlify's CDN keeps them for 60 s (refreshed in the background), so most
+      // visitors never wait for the database. Admin changes clear them at once.
+      Object.assign(headers, {
+        'Cache-Control': 'public, max-age=0, must-revalidate',
+        'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=60, stale-while-revalidate=86400',
+        'Netlify-Cache-Tag': match.opts.cache,
+      });
+    }
     return json(200, result ?? { ok: true }, headers);
   } catch (err) {
     const status = err instanceof HttpError ? err.status : 500;

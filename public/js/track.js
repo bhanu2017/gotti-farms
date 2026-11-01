@@ -1,4 +1,4 @@
-import { renderLayout, api, esc, money, icon, cart, toast, myOrders, payWithRazorpay, STATUS_LABEL, PAYMENT_LABEL, $, toDate } from '/js/app.js';
+import { renderLayout, api, esc, money, icon, cart, toast, myOrders, payWithRazorpay, STATUS_LABEL, PAYMENT_LABEL, itemQtyText, productOptions, $, toDate } from '/js/app.js';
 
 renderLayout('track');
 const root = $('#track-root');
@@ -19,8 +19,9 @@ async function orderAgain(order, button) {
     let added = 0; let missing = 0;
     for (const it of order.items) {
       const p = products.get(it.product_id);
-      if (!p || p.stock <= 0) { missing++; continue; }
-      cart.set(p, Math.min(cart.qty(p.id) + it.qty, p.stock, 99));
+      const o = p && productOptions(p).find((x) => (x.label || '') === (it.option_label || ''));
+      if (!p || !o || p.stock < o.size) { missing++; continue; }
+      cart.set(p, Math.min(cart.qty(p.id, o.label) + it.qty, Math.floor(p.stock / o.size), 99), o);
       added++;
     }
     if (!added) { toast('These products are not available right now.'); return; }
@@ -49,7 +50,7 @@ function orderCard(o) {
       <ul class="order-products">
         ${shown.map((it) => `<li>
           <img src="${esc(it.image || '/images/placeholder.svg')}" alt="" loading="lazy">
-          <span><b>${esc(it.name)}</b><span class="muted small">${it.qty} ${esc(it.unit)} × ${money(it.price)}</span></span>
+          <span><b>${esc(it.name)}</b><span class="muted small">${esc(itemQtyText(it))} × ${money(it.price)}</span></span>
         </li>`).join('')}
         ${more > 0 ? `<li class="more muted">+ ${more} more item${more > 1 ? 's' : ''}</li>` : ''}
       </ul>
@@ -150,10 +151,11 @@ function orderView(o, phone, justPlaced) {
       </div>
       ${o.items.map((it) => `<div class="cart-line" style="grid-template-columns:56px 1fr auto">
         <img src="${esc(it.image || '/images/placeholder.svg')}" alt="" style="width:56px;height:56px">
-        <div><h3>${esc(it.name)}</h3><div class="muted">${it.qty} ${esc(it.unit)} × ${money(it.price)}</div></div>
+        <div><h3>${esc(it.name)}</h3><div class="muted">${esc(itemQtyText(it))} × ${money(it.price)}</div></div>
         <b>${money(it.line_total)}</b></div>`).join('')}
       <div class="summary" style="position:static;margin-top:14px"><dl>
         <dt>Subtotal</dt><dd>${money(o.subtotal)}</dd>
+        ${o.discount ? `<dt>Discount${o.coupon_code ? ` (${esc(o.coupon_code)})` : ''}</dt><dd class="discount">−${money(o.discount)}</dd>` : ''}
         <dt>Delivery</dt><dd>${o.delivery_fee ? money(o.delivery_fee) : 'Free'}</dd>
         <dt class="total">Total</dt><dd class="total">${money(o.total)}</dd></dl></div>
     </div>

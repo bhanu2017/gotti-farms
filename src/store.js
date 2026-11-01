@@ -8,7 +8,7 @@ export { HttpError };
 // ---------------- Products & categories ----------------
 
 const productColumns = `p.id, p.name, p.category_id, c.name AS category_name, p.price, p.unit, p.image,
-  p.description, p.stock, p.featured, p.active, p.created_at`;
+  p.description, p.stock, p.featured, p.active, p.created_at, p.options`;
 
 export function listCategories() {
   return all(`
@@ -27,11 +27,56 @@ export function listProducts({ category, q, featured, ids, sort, includeInactive
   const order = { price_asc: 'p.price ASC', price_desc: 'p.price DESC', name: 'p.name ASC', newest: 'p.created_at DESC' }[sort]
     || 'p.featured DESC, p.id ASC';
   return all(`SELECT ${productColumns} FROM products p JOIN categories c ON c.id = p.category_id
-              ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY ${order}`, params);
+              ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY ${order}`, params).then((rows) => rows.map(withOptions));
 }
 
-export function getProduct(id) {
-  return one(`SELECT ${productColumns} FROM products p JOIN categories c ON c.id = p.category_id WHERE p.id = ?`, [id]);
+export async function getProduct(id) {
+  const row = await one(`SELECT ${productColumns} FROM products p JOIN categories c ON c.id = p.category_id WHERE p.id = ?`, [id]);
+  return row ? withOptions(row) : row;
+}
+
+// ---------------- Weight / pack options ----------------
+// products.options holds JSON like [{"label":"5 kg","size":5,"price":60000}].
+// size = how many stock units (kg, packs…) one of these uses; price is in paise.
+// An empty list means the product is sold simply per unit at products.price.
+
+function parseOptions(text) {
+  try {
+    const list = JSON.parse(text || '[]');
+    return Array.isArray(list) ? list.filter((o) => o && o.label && o.size > 0 && o.price > 0) : [];
+  } catch { return []; }
+}
+
+function withOptions(row) {
+  return { ...row, options: parseOptions(row.options) };
+}
+
+/** The option a shopper picked, or the plain per-unit option when the product has none. */
+export function pickOption(product, label) {
+  const want = String(label ?? '').trim().toLowerCase();
+  if (!product.options.length) return want ? null : { label: '', size: 1, price: product.price };
+  if (!want) return product.options.find((o) => o.size === 1) || product.options[0];
+  return product.options.find((o) => o.label.toLowerCase() === want) || null;
+}
+
+function cleanOptions(input) {
+  if (input == null || input === '') return [];
+  const list = Array.isArray(input) ? input : null;
+  if (!list) throw new HttpError(400, 'Weight options are not in the right format.');
+  if (list.length > 8) throw new HttpError(400, 'Add at most 8 weight options.');
+  const seen = new Set();
+  return list.map((o, i) => {
+    const label = String(o?.label ?? '').trim().slice(0, 24);
+    const size = Number(o?.size);
+    const priceRupees = Number(o?.price_rupees ?? (Number(o?.price) / 100));
+    const n = i + 1;
+    if (!label) throw new HttpError(400, `Weight option ${n}: enter a label, for example "5 kg".`);
+    if (seen.has(label.toLowerCase())) throw new HttpError(400, `Weight option "${label}" is listed twice.`);
+    seen.add(label.toLowerCase());
+    if (!Number.isInteger(size) || size < 1 || size > 10000) throw new HttpError(400, `Weight option "${label}": "uses stock" must be a whole number, 1 or more.`);
+    if (!Number.isFinite(priceRupees) || priceRupees <= 0 || priceRupees > 1_000_000) throw new HttpError(400, `Weight option "${label}": enter a price greater than ₹0.`);
+    return { label, size, price: Math.round(priceRupees * 100) };
+  });
 }
 
 async function cleanProduct(input) {
@@ -53,22 +98,23 @@ async function cleanProduct(input) {
     description: String(input.description ?? '').trim().slice(0, 1000),
     featured: input.featured ? 1 : 0,
     active: input.active === false || input.active === 0 ? 0 : 1,
+    options: JSON.stringify(cleanOptions(input.options)),
   };
 }
 
 export async function createProduct(input) {
   const p = await cleanProduct(input);
-  const row = await one(`INSERT INTO products (name, category_id, price, unit, image, description, stock, featured, active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-  [p.name, p.category_id, p.price, p.unit, p.image, p.description, p.stock, p.featured, p.active]);
+  const row = await one(`INSERT INTO products (name, category_id, price, unit, image, description, stock, featured, active, options)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+  [p.name, p.category_id, p.price, p.unit, p.image, p.description, p.stock, p.featured, p.active, p.options]);
   return getProduct(row.id);
 }
 
 export async function updateProduct(id, input) {
   if (!(await getProduct(id))) throw new HttpError(404, 'Product not found.');
   const p = await cleanProduct(input);
-  await exec('UPDATE products SET name=?, category_id=?, price=?, unit=?, image=?, description=?, stock=?, featured=?, active=? WHERE id=?',
-    [p.name, p.category_id, p.price, p.unit, p.image, p.description, p.stock, p.featured, p.active, id]);
+  await exec('UPDATE products SET name=?, category_id=?, price=?, unit=?, image=?, description=?, stock=?, featured=?, active=?, options=? WHERE id=?',
+    [p.name, p.category_id, p.price, p.unit, p.image, p.description, p.stock, p.featured, p.active, p.options, id]);
   return getProduct(id);
 }
 
@@ -116,56 +162,104 @@ export function deliveryFeeFor(subtotal) {
   return subtotal >= config.freeDeliveryAbove ? 0 : config.deliveryFee;
 }
 
+/** First-order offer: the discount (paise) a code gives on this subtotal, or an error message. */
+export async function couponDiscount(code, phone, subtotal) {
+  const want = String(code ?? '').trim().toUpperCase();
+  if (!want) return { discount: 0 };
+  const offer = config.firstOrder;
+  if (!offer.percent || want !== offer.code) return { error: 'This discount code is not valid.' };
+  const p = normalizePhone(phone);
+  if (/^[6-9]\d{9}$/.test(p)) {
+    const prior = await one("SELECT 1 AS ok FROM orders WHERE phone = ? AND order_status != 'cancelled' LIMIT 1", [p]);
+    if (prior) return { error: `${offer.code} is for your first order only. This mobile number has ordered before.` };
+  }
+  const discount = Math.min(Math.round((subtotal * offer.percent) / 100), offer.maxDiscount || Infinity);
+  return { discount, code: offer.code };
+}
+
 /**
  * Validate cart against current prices and stock, then save the order.
  * Prices always come from the database, never from the browser.
+ * items: [{ id, qty, opt }] where opt is the weight option label ("5 kg"), or empty.
  */
-export async function createOrder({ items, customer, paymentMethod }) {
+export async function createOrder({ items, customer, paymentMethod, coupon }) {
   const c = validateCustomer(customer);
   if (!['online', 'cod'].includes(paymentMethod)) throw new HttpError(400, 'Choose a payment method.');
   if (paymentMethod === 'cod' && !config.codEnabled) throw new HttpError(400, 'Cash on delivery is not available right now.');
   if (!Array.isArray(items) || items.length === 0) throw new HttpError(400, 'Your cart is empty.');
   if (items.length > 50) throw new HttpError(400, 'Too many different items in one order.');
 
-  const qtyById = new Map();
+  const wanted = new Map(); // "id|option" -> { id, opt, qty }
   for (const it of items) {
     const id = Number(it?.id); const qty = Number(it?.qty);
+    const opt = String(it?.opt ?? '').trim().slice(0, 24);
     if (!Number.isInteger(id) || id < 1 || !Number.isInteger(qty) || qty < 1 || qty > 99) throw new HttpError(400, 'Cart has an invalid item. Refresh the page and try again.');
-    qtyById.set(id, (qtyById.get(id) || 0) + qty);
+    const key = `${id}|${opt.toLowerCase()}`;
+    const prev = wanted.get(key);
+    wanted.set(key, { id, opt, qty: (prev?.qty || 0) + qty });
   }
-  const products = await listProducts({ ids: [...qtyById.keys()] });
+  const products = await listProducts({ ids: [...new Set([...wanted.values()].map((w) => w.id))] });
   const lines = [];
-  for (const [id, qty] of qtyById) {
-    const p = products.find((x) => x.id === id);
+  const unitsByProduct = new Map();
+  for (const w of wanted.values()) {
+    const p = products.find((x) => x.id === w.id);
     if (!p) throw new HttpError(409, 'An item in your cart is no longer available. Remove it and try again.');
-    if (p.stock < qty) throw new HttpError(409, p.stock === 0 ? `${p.name} is out of stock. Remove it to continue.` : `Only ${p.stock} ${p.unit} of ${p.name} left. Lower the quantity to continue.`);
-    lines.push({ product: p, qty, line_total: p.price * qty });
+    const o = pickOption(p, w.opt);
+    if (!o) throw new HttpError(409, `The ${w.opt} option of ${p.name} is no longer available. Remove it and add it again.`);
+    const units = o.size * w.qty;
+    unitsByProduct.set(p.id, (unitsByProduct.get(p.id) || 0) + units);
+    lines.push({ product: p, option: o, qty: w.qty, units, line_total: o.price * w.qty });
+  }
+  for (const [id, units] of unitsByProduct) {
+    const p = products.find((x) => x.id === id);
+    if (p.stock < units) throw new HttpError(409, p.stock <= 0 ? `${p.name} is out of stock. Remove it to continue.` : `Only ${p.stock} ${p.unit} of ${p.name} left. Lower the quantity to continue.`);
   }
   const subtotal = lines.reduce((s, l) => s + l.line_total, 0);
   const delivery_fee = deliveryFeeFor(subtotal);
-  const total = subtotal + delivery_fee;
+  const offer = await couponDiscount(coupon, c.phone, subtotal);
+  if (offer.error) throw new HttpError(400, offer.error);
+  const discount = offer.discount || 0;
+  const total = subtotal - discount + delivery_fee;
   if (paymentMethod === 'online' && total < 100) throw new HttpError(400, 'Order total is too small for online payment.');
 
   const order_number = await newOrderNumber();
   return tx(async () => {
     const isCod = paymentMethod === 'cod';
     const row = await one(`INSERT INTO orders (order_number, customer_name, phone, email, address, city, state, pincode, notes,
-        subtotal, delivery_fee, total, payment_method, payment_status, order_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        subtotal, delivery_fee, discount, coupon_code, total, payment_method, payment_status, order_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     [order_number, c.name, c.phone, c.email, c.address, c.city, c.state, c.pincode, c.notes,
-      subtotal, delivery_fee, total, paymentMethod, isCod ? 'cod' : 'pending', isCod ? 'confirmed' : 'pending_payment']);
+      subtotal, delivery_fee, discount, discount ? offer.code : '', total, paymentMethod, isCod ? 'cod' : 'pending', isCod ? 'confirmed' : 'pending_payment']);
     for (const l of lines) {
-      await exec('INSERT INTO order_items (order_id, product_id, name, unit, image, price, qty, line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [row.id, l.product.id, l.product.name, l.product.unit, l.product.image, l.product.price, l.qty, l.line_total]);
+      await exec(`INSERT INTO order_items (order_id, product_id, name, unit, image, price, qty, line_total, option_label, stock_units)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [row.id, l.product.id, l.product.name, l.product.unit, l.product.image, l.option.price, l.qty, l.line_total, l.option.label, l.units]);
     }
     if (isCod) await deductStock(row.id, { strict: true });
     return getOrderById(row.id);
   });
 }
 
+// ---------------- First-order pop-up sign-ups ----------------
+export async function saveLead({ contact, source }) {
+  const raw = String(contact ?? '').trim().slice(0, 120);
+  const phone = normalizePhone(raw);
+  let kind; let value;
+  if (/^[6-9]\d{9}$/.test(phone)) { kind = 'whatsapp'; value = phone; }
+  else if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) { kind = 'email'; value = raw.toLowerCase(); }
+  else throw new HttpError(400, 'Enter a 10-digit WhatsApp number or an email address.');
+  await exec('INSERT INTO leads (contact, kind, source) VALUES (?, ?, ?) ON CONFLICT (contact) DO NOTHING',
+    [value, kind, String(source ?? '').slice(0, 40)]);
+  return { ok: true, code: config.firstOrder.code, percent: config.firstOrder.percent, maxDiscount: config.firstOrder.maxDiscount };
+}
+
+export function adminListLeads() {
+  return all('SELECT id, contact, kind, source, created_at FROM leads ORDER BY id DESC LIMIT 1000');
+}
+
 /** Reduce stock for an order's items. strict = fail if not enough (used before payment is taken). */
 async function deductStock(orderId, { strict }) {
-  const items = await all('SELECT product_id, qty, name FROM order_items WHERE order_id = ?', [orderId]);
+  const items = await all('SELECT product_id, CASE WHEN stock_units > 0 THEN stock_units ELSE qty END AS qty, name FROM order_items WHERE order_id = ?', [orderId]);
   for (const it of items) {
     if (strict) {
       const r = await exec('UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?', [it.qty, it.product_id, it.qty]);
@@ -179,7 +273,7 @@ async function deductStock(orderId, { strict }) {
 }
 
 async function restoreStock(orderId) {
-  const items = await all('SELECT product_id, qty FROM order_items WHERE order_id = ?', [orderId]);
+  const items = await all('SELECT product_id, CASE WHEN stock_units > 0 THEN stock_units ELSE qty END AS qty FROM order_items WHERE order_id = ?', [orderId]);
   for (const it of items) await exec('UPDATE products SET stock = stock + ? WHERE id = ?', [it.qty, it.product_id]);
   await exec('UPDATE orders SET stock_deducted = 0 WHERE id = ?', [orderId]);
 }
@@ -187,7 +281,7 @@ async function restoreStock(orderId) {
 export async function getOrderById(id) {
   const order = await one('SELECT * FROM orders WHERE id = ?', [id]);
   if (!order) return null;
-  order.items = await all('SELECT product_id, name, unit, image, price, qty, line_total FROM order_items WHERE order_id = ? ORDER BY id', [id]);
+  order.items = await all('SELECT product_id, name, unit, option_label, image, price, qty, line_total FROM order_items WHERE order_id = ? ORDER BY id', [id]);
   return order;
 }
 
@@ -207,7 +301,7 @@ export function publicOrder(o) {
   return {
     order_number: o.order_number, created_at: o.created_at, customer_name: o.customer_name,
     address: o.address, city: o.city, state: o.state, pincode: o.pincode,
-    subtotal: o.subtotal, delivery_fee: o.delivery_fee, total: o.total,
+    subtotal: o.subtotal, delivery_fee: o.delivery_fee, discount: o.discount || 0, coupon_code: o.coupon_code || '', total: o.total,
     payment_method: o.payment_method, payment_status: o.payment_status, order_status: o.order_status,
     items: o.items,
   };

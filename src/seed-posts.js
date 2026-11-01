@@ -176,7 +176,7 @@ Government subsidies are available for drip and sprinkler systems. Ask your agri
 
 Mulch is a layer that covers the soil around plants.
 
-- **Organic mulch:** spread a 5 to 8 cm layer of paddy straw, dry leaves or crop residue between the rows.
+- **Natural mulch:** spread a 5 to 8 cm layer of paddy straw, dry leaves or crop residue between the rows.
 - **Plastic mulch:** sheets laid over raised beds, with holes for the plants. It is widely used for chilli, tomato and other vegetables.
 
 Mulch keeps the soil moist for longer, keeps it cooler in summer, and stops weeds.
@@ -218,3 +218,130 @@ Mulch keeps the soil moist for longer, keeps it cooler in summer, and stops weed
   },
 ];
 
+
+// Customer-facing posts for the Recipes & Health section (/recipes). Added to existing stores once
+// by the '2026-10-recipe-posts' migration in db.js. Edit or delete them any time in admin.
+export const RECIPE_POSTS = [
+  {
+    slug: 'health-benefits-of-guntur-turmeric',
+    category: 'recipes',
+    image: '/images/p-natural-turmeric.webp',
+    title_en: 'Health benefits of Guntur turmeric',
+    summary_en: 'Why Guntur turmeric has a deep colour and strong aroma, what curcumin is, and simple ways to use turmeric every day.',
+    body_en: `Guntur and the surrounding Krishna delta are among India's best-known turmeric regions. The warm climate and fertile soil give the rhizomes a deep yellow-orange colour and a strong, earthy aroma.
+
+## What makes turmeric special
+
+Turmeric's colour comes from **curcumin**, a natural compound that researchers have studied for its antioxidant and anti-inflammatory properties. Turmeric has been part of Indian cooking and home remedies for centuries.
+
+- **Everyday cooking:** a pinch in dal, sambar, curries and rice adds colour and flavour.
+- **Better absorption:** curcumin is absorbed better when turmeric is cooked with a little oil or ghee and a pinch of black pepper.
+- **Freshness matters:** turmeric that is dried and ground with care keeps more of its aroma and colour.
+
+## Simple ways to use it
+
+1. **Haldi doodh (turmeric milk):** warm a cup of milk with ¼ teaspoon turmeric, a pinch of black pepper and a little jaggery.
+2. **Tadka:** add turmeric to hot oil with mustard seeds and curry leaves for the last 10 seconds, then pour over dal.
+3. **Pickles and podis:** turmeric is a key part of Andhra mango pickle and many spice powders.
+
+## How we grow and process our turmeric
+
+We grow turmeric without synthetic colours or additives. After harvest, the rhizomes are boiled, sun-dried and polished, then ground in small batches so the powder stays fresh.
+
+## Storage tips
+
+Keep turmeric powder in an airtight glass or steel jar, away from sunlight and moisture. Use a dry spoon every time.
+
+*This article is general information about food and cooking. It is not medical advice. If you have a health condition, are pregnant, or take medicines such as blood thinners, talk to your doctor before taking turmeric in large amounts.*`,
+    title_te: 'గుంటూరు పసుపు ఆరోగ్య ప్రయోజనాలు',
+    summary_te: 'గుంటూరు పసుపుకు ముదురు రంగు, ఘాటైన వాసన ఎందుకు ఉంటాయి, కుర్కుమిన్ అంటే ఏమిటి, రోజూ పసుపును సులభంగా ఎలా వాడుకోవచ్చు.',
+    body_te: `గుంటూరు, కృష్ణా డెల్టా ప్రాంతాలు భారతదేశంలో పసుపుకు ప్రసిద్ధి చెందిన ప్రాంతాలు. ఇక్కడి వెచ్చని వాతావరణం, సారవంతమైన నేల వల్ల పసుపు కొమ్ములకు ముదురు పసుపు-నారింజ రంగు, ఘాటైన మట్టి వాసన వస్తాయి.
+
+## పసుపు ప్రత్యేకత ఏమిటి
+
+పసుపు రంగుకు కారణం **కుర్కుమిన్** అనే సహజ పదార్థం. దీని యాంటీఆక్సిడెంట్, వాపు తగ్గించే గుణాలపై శాస్త్రవేత్తలు పరిశోధనలు చేశారు. శతాబ్దాలుగా పసుపు మన వంటల్లో, ఇంటి చిట్కాల్లో భాగంగా ఉంది.
+
+- **రోజువారీ వంట:** పప్పు, సాంబారు, కూరలు, అన్నంలో చిటికెడు పసుపు రంగు, రుచి ఇస్తుంది.
+- **బాగా శరీరానికి అందాలంటే:** కొద్దిగా నూనె లేదా నెయ్యి, చిటికెడు మిరియాల పొడితో కలిపి వండితే కుర్కుమిన్ బాగా అందుతుంది.
+- **తాజాదనం ముఖ్యం:** జాగ్రత్తగా ఎండబెట్టి, పొడి చేసిన పసుపులో వాసన, రంగు ఎక్కువగా నిలుస్తాయి.
+
+## సులభంగా వాడే విధానాలు
+
+1. **పసుపు పాలు:** ఒక కప్పు పాలలో ¼ చెంచా పసుపు, చిటికెడు మిరియాల పొడి, కొద్దిగా బెల్లం వేసి వేడి చేయండి.
+2. **తాలింపు:** ఆవాలు, కరివేపాకుతో పాటు వేడి నూనెలో చివరి 10 సెకన్లు పసుపు వేసి పప్పుపై పోయండి.
+3. **పచ్చళ్లు, పొడులు:** ఆంధ్ర మామిడికాయ పచ్చడి, ఎన్నో కారం పొడుల్లో పసుపు ముఖ్యమైనది.
+
+## మా పసుపు సాగు, తయారీ
+
+మేము కృత్రిమ రంగులు, కలుపు పదార్థాలు లేకుండా పసుపు పండిస్తాము. తవ్విన తర్వాత కొమ్ములను ఉడికించి, ఎండబెట్టి, పాలిష్ చేసి, పొడి తాజాగా ఉండేలా కొద్ది కొద్దిగా మర పట్టిస్తాము.
+
+## నిల్వ చిట్కాలు
+
+పసుపు పొడిని గాలి చొరని గాజు లేదా స్టీల్ డబ్బాలో, ఎండ, తేమకు దూరంగా ఉంచండి. ప్రతిసారీ పొడి చెంచానే వాడండి.
+
+*ఇది ఆహారం, వంట గురించి సాధారణ సమాచారం మాత్రమే, వైద్య సలహా కాదు. మీకు ఏదైనా ఆరోగ్య సమస్య ఉంటే, గర్భిణీ అయితే, లేదా రక్తం పలుచబడే మందులు వాడుతుంటే, పసుపును ఎక్కువ మోతాదులో తీసుకునే ముందు డాక్టర్‌ను సంప్రదించండి.*`,
+  },
+  {
+    slug: 'how-to-cook-naturally-grown-rice-perfectly',
+    category: 'recipes',
+    image: '/images/p-organic-rice.webp',
+    title_en: 'How to cook naturally grown rice perfectly',
+    summary_en: 'Rinse, soak, measure and rest: a simple method for soft, separate grains every time, in a pot or a pressure cooker.',
+    body_en: `Naturally grown rice is fresher and less polished than most supermarket rice, so it can need a little less water and a gentle hand. Follow these steps for soft, separate grains.
+
+## You need
+
+- 1 cup rice (Sona Masoori or any short or medium grain)
+- 1¾ to 2 cups water (pot) or 2 cups water (pressure cooker)
+- ½ teaspoon salt (optional) and a few drops of oil or ghee
+
+## Method
+
+1. **Rinse:** wash the rice 2 to 3 times in cool water, rubbing gently, until the water is only slightly cloudy. This removes dust and extra starch.
+2. **Soak:** soak for 20 to 30 minutes. Soaked rice cooks evenly and the grains stay whole.
+3. **Measure:** drain the rice and add fresh water. New-crop rice needs less water; rice stored for a few months needs a little more.
+4. **Cook in a pot:** bring the water to a boil, add the rice, salt and oil, then cover and cook on the lowest heat for 12 to 15 minutes until the water is absorbed.
+5. **Cook in a pressure cooker:** cook on medium heat for 2 whistles, then turn off the heat.
+6. **Rest:** leave the lid closed for 10 minutes. The steam finishes the cooking.
+7. **Fluff:** loosen the rice with a fork or flat spoon from the sides. Do not stir hard.
+
+## Tips
+
+- **Sticky rice?** Use a little less water next time and do not skip the rinse.
+- **Hard rice?** Add 2 to 3 tablespoons of hot water, cover and rest for 5 more minutes.
+- **Leftover rice:** cool it quickly and refrigerate within an hour. It is perfect for lemon rice or pulihora the next day.
+
+## Storing rice
+
+Store rice in an airtight container in a cool, dry place. A few dried neem leaves or red chillies in the container help keep insects away.`,
+    title_te: 'సహజంగా పండించిన బియ్యాన్ని చక్కగా ఎలా వండాలి',
+    summary_te: 'కడగడం, నానబెట్టడం, కొలవడం, మూత పెట్టి ఉంచడం: గిన్నెలో అయినా, కుక్కర్‌లో అయినా మెత్తటి, విడివిడిగా ఉండే అన్నం కోసం సులభమైన పద్ధతి.',
+    body_te: `సహజంగా పండించిన బియ్యం సూపర్‌మార్కెట్ బియ్యం కంటే తాజాగా, తక్కువ పాలిష్‌తో ఉంటుంది. కాబట్టి కొంచెం తక్కువ నీరు, జాగ్రత్త అవసరం కావచ్చు. మెత్తటి, విడివిడి అన్నం కోసం ఈ దశలను పాటించండి.
+
+## కావలసినవి
+
+- 1 కప్పు బియ్యం (సోనా మసూరి లేదా ఏదైనా చిన్న, మధ్యస్థ గింజ)
+- 1¾ నుండి 2 కప్పుల నీరు (గిన్నె) లేదా 2 కప్పుల నీరు (ప్రెషర్ కుక్కర్)
+- ½ చెంచా ఉప్పు (ఇష్టమైతే), కొన్ని చుక్కల నూనె లేదా నెయ్యి
+
+## తయారీ విధానం
+
+1. **కడగండి:** చల్లని నీటిలో బియ్యాన్ని మెల్లగా రుద్దుతూ 2-3 సార్లు, నీరు కొద్దిగా మాత్రమే తెల్లగా వచ్చే వరకు కడగండి. దీంతో దుమ్ము, అదనపు పిండి పదార్థం పోతాయి.
+2. **నానబెట్టండి:** 20 నుండి 30 నిమిషాలు నానబెట్టండి. నానిన బియ్యం సమానంగా ఉడుకుతుంది, గింజలు విరగవు.
+3. **కొలవండి:** నీరు వడకట్టి, కొత్త నీరు పోయండి. కొత్త పంట బియ్యానికి తక్కువ నీరు, కొన్ని నెలలు నిల్వ ఉన్న బియ్యానికి కొంచెం ఎక్కువ నీరు అవసరం.
+4. **గిన్నెలో:** నీరు మరిగాక బియ్యం, ఉప్పు, నూనె వేసి, మూత పెట్టి అతి తక్కువ మంటపై 12-15 నిమిషాలు, నీరు ఇంకే వరకు ఉడికించండి.
+5. **ప్రెషర్ కుక్కర్‌లో:** మధ్యస్థ మంటపై 2 విజిల్స్ వచ్చాక స్టవ్ ఆపేయండి.
+6. **మూత తీయకండి:** 10 నిమిషాలు అలాగే ఉంచండి. ఆవిరితో అన్నం పూర్తిగా ఉడుకుతుంది.
+7. **విడదీయండి:** ఫోర్క్ లేదా చదునైన గరిటెతో పక్కల నుండి మెల్లగా విడదీయండి. గట్టిగా కలపకండి.
+
+## చిట్కాలు
+
+- **అన్నం ముద్దగా అయితే?** తర్వాతిసారి కొంచెం తక్కువ నీరు పోయండి, కడగడం మానకండి.
+- **అన్నం గట్టిగా ఉంటే?** 2-3 చెంచాల వేడి నీరు చల్లి, మూత పెట్టి మరో 5 నిమిషాలు ఉంచండి.
+- **మిగిలిన అన్నం:** త్వరగా చల్లార్చి గంటలోపు ఫ్రిజ్‌లో పెట్టండి. మరుసటి రోజు నిమ్మకాయ పులిహోరకు బాగుంటుంది.
+
+## బియ్యం నిల్వ
+
+బియ్యాన్ని గాలి చొరని డబ్బాలో చల్లని, పొడి ప్రదేశంలో ఉంచండి. డబ్బాలో కొన్ని ఎండిన వేప ఆకులు లేదా ఎండు మిరపకాయలు వేస్తే పురుగులు రావు.`,
+  },
+];

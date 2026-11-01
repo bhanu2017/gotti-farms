@@ -14,6 +14,14 @@ export const config = {
   deliveryFee: rupees(env.DELIVERY_FEE, 40),
   freeDeliveryAbove: rupees(env.FREE_DELIVERY_ABOVE, 499),
   codEnabled: env.COD_ENABLED !== 'false',
+  // Website address used in links shared on WhatsApp/Google (no trailing slash)
+  siteUrl: (env.SITE_URL || 'https://gugulefarms.com').replace(/\/+$/, ''),
+  // First-order offer shown in the pop-up: code, % off, and the most it can take off (₹)
+  firstOrder: {
+    code: (env.FIRST_ORDER_CODE || 'WELCOME10').trim().toUpperCase(),
+    percent: Math.min(Math.max(Number(env.FIRST_ORDER_PERCENT ?? 10) || 0, 0), 50),
+    maxDiscount: rupees(env.FIRST_ORDER_MAX_DISCOUNT, 100),
+  },
   adminPassword: env.ADMIN_PASSWORD || '',
   sessionSecret: env.SESSION_SECRET || '',
   // Any Postgres connection string works: Neon, Netlify Database, Supabase.

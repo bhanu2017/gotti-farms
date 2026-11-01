@@ -1,14 +1,17 @@
 import { all, one, exec } from './db.js';
 import { HttpError } from './errors.js';
 
-export const POST_CATEGORIES = ['pests', 'diseases', 'soil', 'water', 'general'];
+export const POST_CATEGORIES = ['pests', 'diseases', 'soil', 'water', 'general', 'recipes'];
+// 'recipes' posts appear on the customer Recipes & Health page (/recipes); the rest on Farmer Tips (/blog).
 
 const listColumns = `id, slug, category, image, title_en, summary_en, title_te, summary_te, published, created_at, updated_at,
   length(body_en) AS length_en, length(body_te) AS length_te`;
 
-export function listPosts({ category, q, limit, includeDrafts = false } = {}) {
+export function listPosts({ category, q, limit, section, includeDrafts = false } = {}) {
   const where = []; const params = [];
   if (!includeDrafts) where.push('published = 1');
+  if (section === 'recipes') where.push("category = 'recipes'");
+  if (section === 'tips') where.push("category != 'recipes'");
   if (category && POST_CATEGORIES.includes(category)) { where.push('category = ?'); params.push(category); }
   if (q) {
     where.push('(title_en ILIKE ? OR summary_en ILIKE ? OR body_en ILIKE ? OR title_te ILIKE ? OR summary_te ILIKE ? OR body_te ILIKE ?)');

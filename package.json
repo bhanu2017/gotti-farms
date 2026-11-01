@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@netlify/blobs": ">=8.1.0",
+    "@netlify/functions": "^2.4.0",
     "pg": "^8.11.0"
   }
 }

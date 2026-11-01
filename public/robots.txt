@@ -1,0 +1,9 @@
+# Gotti Farms – rules for search engines
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /cart
+Disallow: /track
+Disallow: /api/
+
+Sitemap: https://gugulefarms.com/sitemap.xml

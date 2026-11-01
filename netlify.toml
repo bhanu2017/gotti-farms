@@ -11,11 +11,12 @@
   node_bundler = "esbuild"
   external_node_modules = ["pg"]
 
-# Article links like /blog/how-to-take-a-soil-sample are shown by blog-post.html
-[[redirects]]
-  from = "/blog/:slug"
-  to = "/blog-post.html"
-  status = 200
+# The page renderer (pages.mjs) reads these page templates at run time
+[functions.pages]
+  included_files = ["public/index.html", "public/shop.html", "public/product.html", "public/blog-post.html", "public/404.html"]
+
+# Article links (/blog/…, /recipes/…), product pages (/product/…) and /sitemap.xml are built by
+# netlify/functions/pages.mjs, so they need no redirect rules here.
 
 [[headers]]
   for = "/*"
@@ -30,7 +31,7 @@
     Cache-Control = "public, max-age=604800"
 
 [[headers]]
-  for = "/admin"
+  for = "/admin*"
   [headers.values]
     X-Robots-Tag = "noindex"
 

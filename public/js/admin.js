@@ -1,4 +1,4 @@
-import { api, esc, money, logoMark, STATUS_LABEL, PAYMENT_LABEL, toast, $, $$, toDate } from '/js/app.js';
+import { api, esc, money, logoMark, STATUS_LABEL, PAYMENT_LABEL, toast, itemQtyText, $, $$, toDate } from '/js/app.js';
 
 const root = $('#admin-root');
 let categories = [];
@@ -38,7 +38,8 @@ function shell() {
       <div class="admin-tabs" role="tablist">
         <button role="tab" data-tab="orders">Orders</button>
         <button role="tab" data-tab="products">Products</button>
-        <button role="tab" data-tab="blog">Farmer Tips</button>
+        <button role="tab" data-tab="blog">Articles</button>
+        <button role="tab" data-tab="leads">Offer sign-ups</button>
       </div>
       <span class="spacer"></span>
       <a href="/" target="_blank" rel="noopener">View store</a>
@@ -53,7 +54,7 @@ function shell() {
 
 function show() {
   $$('.admin-tabs [data-tab]').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === tab));
-  ({ orders: ordersView, products: productsView, blog: postsView }[tab])().catch(handleError);
+  ({ orders: ordersView, products: productsView, blog: postsView, leads: leadsView }[tab])().catch(handleError);
 }
 
 function handleError(err) {
@@ -125,7 +126,8 @@ async function orderDialog(id) {
       ${o.notes ? `<div class="alert alert-info">Note from customer: ${esc(o.notes)}</div>` : ''}
       <div class="table-wrap"><table>
         <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Total</th></tr></thead>
-        <tbody>${o.items.map((it) => `<tr><td>${esc(it.name)}</td><td class="num">${it.qty} ${esc(it.unit)}</td><td class="num">${money(it.price)}</td><td class="num">${money(it.line_total)}</td></tr>`).join('')}
+        <tbody>${o.items.map((it) => `<tr><td>${esc(it.name)}</td><td class="num">${esc(itemQtyText(it))}</td><td class="num">${money(it.price)}</td><td class="num">${money(it.line_total)}</td></tr>`).join('')}
+        ${o.discount ? `<tr><td colspan="3">Discount${o.coupon_code ? ` (${esc(o.coupon_code)})` : ''}</td><td class="num">−${money(o.discount)}</td></tr>` : ''}
         <tr><td colspan="3">Delivery</td><td class="num">${o.delivery_fee ? money(o.delivery_fee) : 'Free'}</td></tr>
         <tr><td colspan="3"><b>Total</b></td><td class="num"><b>${money(o.total)}</b></td></tr></tbody></table></div>
       <p class="muted" style="font-size:.85rem">Placed ${fmtDate(o.created_at)}${o.razorpay_payment_id ? ` · Razorpay payment ${esc(o.razorpay_payment_id)}` : ''}</p>
@@ -170,7 +172,7 @@ async function productsView() {
           <td><img src="${esc(p.image || '/images/placeholder.svg')}" alt=""></td>
           <td><b>${esc(p.name)}</b></td>
           <td>${esc(p.category_name)}</td>
-          <td class="num">${money(p.price)} / ${esc(p.unit)}</td>
+          <td class="num">${money(p.price)} / ${esc(p.unit)}${p.options?.length ? `<br><small class="muted">${p.options.map((o) => `${esc(o.label)} ${money(o.price)}`).join(' · ')}</small>` : ''}</td>
           <td class="num ${p.stock <= 10 ? 'warn' : ''}">${p.stock}</td>
           <td>${p.featured ? 'Yes' : '–'}</td>
           <td>${p.active ? 'Yes' : 'Hidden'}</td>
@@ -181,6 +183,15 @@ async function productsView() {
     const id = Number(e.target.closest('[data-edit]')?.dataset.edit);
     if (id) productDialog(products.find((p) => p.id === id));
   });
+}
+
+function optRow(o = { label: '', size: 1, price: 0 }) {
+  return `<div class="opt-row">
+    <input class="input" name="opt_label" placeholder="5 kg" value="${esc(o.label)}" aria-label="Option label">
+    <input class="input" name="opt_size" type="number" min="1" step="1" value="${Number(o.size) || 1}" aria-label="Uses stock">
+    <input class="input" name="opt_price" type="number" min="1" step="0.5" value="${o.price ? o.price / 100 : ''}" aria-label="Option price in rupees">
+    <button class="btn btn-outline btn-sm" type="button" data-del-opt aria-label="Remove option">×</button>
+  </div>`;
 }
 
 function productDialog(p) {
@@ -200,6 +211,17 @@ function productDialog(p) {
           <div class="field"><label for="p-unit">Sold per <span class="hint">(kg, pack, dozen…)</span></label><input class="input" id="p-unit" name="unit" required value="${esc(p.unit)}"></div>
           <div class="field"><label for="p-price">Price (₹)</label><input class="input" id="p-price" name="price_rupees" type="number" min="1" step="0.5" required value="${p.price / 100 || ''}"></div>
           <div class="field"><label for="p-stock">Stock available</label><input class="input" id="p-stock" name="stock" type="number" min="0" step="1" required value="${p.stock}"></div>
+          <div class="field full">
+            <label>Weight / pack options <span class="hint">(optional, for example 1 kg, 5 kg, 25 kg)</span></label>
+            <p class="muted" style="font-size:.82rem;margin:0 0 8px">Leave empty to sell simply per ${esc(p.unit || 'unit')} at the price above.
+              "Uses stock" is how many ${esc(p.unit || 'units')} one option takes from stock (a 5 kg bag uses 5).</p>
+            <div class="opt-editor" id="opt-editor">
+              <div class="opt-row opt-head"><span>Label</span><span>Uses stock</span><span>Price (₹)</span><span></span></div>
+              ${(p.options || []).map(optRow).join('')}
+            </div>
+            <button class="btn btn-outline btn-sm" type="button" id="add-opt" style="margin-top:8px">+ Add option</button>
+            ${p.unit === 'kg' && !(p.options || []).length ? '<button class="btn btn-outline btn-sm" type="button" id="std-opts" style="margin-top:8px">Add 1 kg / 5 kg / 25 kg</button>' : ''}
+          </div>
           <div class="field full"><label for="p-desc">Description</label><textarea class="input" id="p-desc" name="description" rows="2">${esc(p.description)}</textarea></div>
           <div class="field full"><label for="p-file">Photo</label>
             <div style="display:flex;gap:14px;align-items:center">
@@ -223,6 +245,14 @@ function productDialog(p) {
   dlg.showModal();
   dlg.onclick = (e) => { if (e.target.closest('[data-close]') || e.target === dlg) dlg.close(); };
   const alertBox = (msg) => { $('#p-alert').innerHTML = `<div class="alert alert-error" role="alert">${esc(msg)}</div>`; };
+  const editor = $('#opt-editor');
+  $('#add-opt').addEventListener('click', () => editor.insertAdjacentHTML('beforeend', optRow()));
+  $('#std-opts')?.addEventListener('click', (e) => {
+    const base = Number($('#p-price').value) || 0;
+    editor.insertAdjacentHTML('beforeend', [1, 5, 25].map((n) => optRow({ label: `${n} kg`, size: n, price: base * n * 100 })).join(''));
+    e.currentTarget.remove();
+  });
+  editor.addEventListener('click', (e) => { if (e.target.closest('[data-del-opt]')) e.target.closest('.opt-row').remove(); });
 
   $('#p-file').addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -245,6 +275,11 @@ function productDialog(p) {
       price_rupees: Number(f.get('price_rupees')), stock: Number(f.get('stock')),
       description: f.get('description'), image: f.get('image'),
       featured: f.get('featured') === 'on', active: f.get('active') === 'on',
+      options: $$('.opt-row:not(.opt-head)', editor).map((row) => ({
+        label: $('[name="opt_label"]', row).value.trim(),
+        size: Number($('[name="opt_size"]', row).value),
+        price_rupees: Number($('[name="opt_price"]', row).value),
+      })).filter((o) => o.label || o.price_rupees),
     };
     try {
       await api(isNew ? '/api/admin/products' : `/api/admin/products/${p.id}`, { method: isNew ? 'POST' : 'PUT', body });
@@ -265,16 +300,36 @@ function productDialog(p) {
   });
 }
 
+// ---------- Offer sign-ups (first-order pop-up) ----------
+async function leadsView() {
+  const view = $('#view');
+  const leads = await api('/api/admin/leads');
+  const csv = 'contact,type,date\n' + leads.map((l) => `${l.contact},${l.kind},${toDate(l.created_at).toISOString()}`).join('\n');
+  view.innerHTML = `
+    <div class="toolbar">
+      <h2>Offer sign-ups (${leads.length})</h2>
+      ${leads.length ? `<a class="btn btn-outline btn-sm" download="gotti-farms-signups.csv" href="data:text/csv;charset=utf-8,${encodeURIComponent(csv)}">Download CSV</a>` : ''}
+    </div>
+    <p class="muted">People who shared their WhatsApp number or email in the first-order pop-up. Send them the discount code and harvest updates.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>WhatsApp / email</th><th>Type</th><th>Signed up</th><th></th></tr></thead>
+      <tbody>${leads.length ? leads.map((l) => `<tr>
+        <td><b>${esc(l.contact)}</b></td><td>${l.kind === 'whatsapp' ? 'WhatsApp' : 'Email'}</td><td>${fmtDate(l.created_at)}</td>
+        <td>${l.kind === 'whatsapp' ? `<a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://wa.me/91${esc(l.contact)}">Message</a>` : `<a class="btn btn-outline btn-sm" href="mailto:${esc(l.contact)}">Email</a>`}</td>
+      </tr>`).join('') : '<tr><td colspan="4" class="muted" style="text-align:center;padding:30px">No sign-ups yet.</td></tr>'}</tbody></table></div>`;
+}
+
 // ---------- Farmer Tips (blog) ----------
-const TOPIC_NAMES = { pests: 'Pests', diseases: 'Diseases', soil: 'Soil', water: 'Water', general: 'General' };
+const TOPIC_NAMES = { pests: 'Pests', diseases: 'Diseases', soil: 'Soil', water: 'Water', general: 'General', recipes: 'Recipes & Health (customers)' };
 
 async function postsView() {
   const view = $('#view');
   const posts = await api('/api/admin/posts');
   view.innerHTML = `
     <div class="toolbar">
-      <h2>Farmer Tips (${posts.length})</h2>
-      <a class="btn btn-outline btn-sm" href="/blog" target="_blank" rel="noopener">View blog</a>
+      <h2>Articles (${posts.length})</h2>
+      <a class="btn btn-outline btn-sm" href="/blog" target="_blank" rel="noopener">Farmer Tips page</a>
+      <a class="btn btn-outline btn-sm" href="/recipes" target="_blank" rel="noopener">Recipes page</a>
       <button class="btn btn-primary btn-sm" id="add-post" type="button">Write a post</button>
     </div>
     <div class="table-wrap"><table>
@@ -288,7 +343,7 @@ async function postsView() {
           <td><span class="pill ${p.published ? '' : 'neutral'}">${p.published ? 'Published' : 'Draft'}</span></td>
           <td>${fmtDate(p.updated_at)}</td>
           <td><button class="btn btn-outline btn-sm" type="button" data-edit-post="${p.id}">Edit</button></td>
-        </tr>`).join('') : '<tr><td colspan="7" class="muted" style="text-align:center;padding:30px">No posts yet. Write your first farmer tip.</td></tr>'}
+        </tr>`).join('') : '<tr><td colspan="7" class="muted" style="text-align:center;padding:30px">No posts yet. Write your first article.</td></tr>'}
       </tbody></table></div>`;
   $('#add-post').addEventListener('click', () => postDialog(null));
   view.querySelector('tbody').addEventListener('click', async (e) => {
@@ -340,7 +395,7 @@ async function postDialog(p) {
       </div>
       <div class="dialog-foot">
         ${isNew ? '' : '<button class="btn btn-danger btn-sm" type="button" id="post-delete" style="margin-right:auto">Delete</button>'}
-        ${!isNew && p.published ? `<a class="btn btn-outline btn-sm" href="/blog/${encodeURIComponent(p.slug)}" target="_blank" rel="noopener">View post</a>` : ''}
+        ${!isNew && p.published ? `<a class="btn btn-outline btn-sm" href="/${p.category === 'recipes' ? 'recipes' : 'blog'}/${encodeURIComponent(p.slug)}" target="_blank" rel="noopener">View post</a>` : ''}
         <button class="btn btn-outline btn-sm" type="button" data-close>Cancel</button>
         <button class="btn btn-primary btn-sm" type="submit" id="post-save">${isNew ? 'Save post' : 'Save changes'}</button>
       </div>

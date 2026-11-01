@@ -1,16 +1,10 @@
 // Shared helpers for the farmer blog: language choice, topic names, article rendering.
 import { esc } from '/js/app.js';
+import { currentLang as langNow, setLang as setSiteLang } from '/js/i18n.js';
 
-const LANG_KEY = 'gf_blog_lang';
-
-export function getLang() {
-  const fromUrl = new URLSearchParams(location.search).get('lang');
-  if (fromUrl === 'te' || fromUrl === 'en') return fromUrl;
-  try { return localStorage.getItem(LANG_KEY) === 'te' ? 'te' : 'en'; } catch { return 'en'; }
-}
-export function setLang(lang) {
-  try { localStorage.setItem(LANG_KEY, lang); } catch { /* ignore */ }
-}
+// The language is shared with the rest of the site (header switch), see i18n.js.
+export const getLang = langNow;
+export function setLang(lang) { setSiteLang(lang); }
 
 export const TOPICS = {
   pests: { en: 'Pests', te: 'పురుగులు' },
@@ -18,7 +12,11 @@ export const TOPICS = {
   soil: { en: 'Soil', te: 'నేల' },
   water: { en: 'Water', te: 'నీటి యాజమాన్యం' },
   general: { en: 'General', te: 'సాధారణం' },
+  recipes: { en: 'Recipes & Health', te: 'వంటకాలు & ఆరోగ్యం' },
 };
+
+/** Farmer tips live under /blog, customer recipes under /recipes. */
+export const postPath = (post) => `/${post.category === 'recipes' ? 'recipes' : 'blog'}/${encodeURIComponent(post.slug)}`;
 
 export const T = {
   en: {
@@ -29,6 +27,10 @@ export const T = {
     whatsapp: 'Send a WhatsApp message', call: 'Call us', related: 'More tips on this topic', updated: 'Updated',
     onlyEnglish: 'This article is available in English only.', notFound: 'Article not found',
     disclaimer: 'This is general guidance. For pesticides and doses, always follow the product label and your local agriculture officer.',
+    recipesTitle: 'Recipes & Health', recipesSub: 'Simple recipes, cooking tips and the goodness of naturally grown food.',
+    backRecipes: 'All recipes', recipeHelp: 'Want to cook this at home?', recipeHelpText: 'Order fresh, naturally grown produce from our farm. Message us on WhatsApp or shop online.',
+    recipeOrder: 'Order on WhatsApp', shop: 'Shop now', recipeDisclaimer: 'General food and cooking information only, not medical advice.',
+    relatedRecipes: 'More recipes',
   },
   te: {
     pageTitle: 'రైతు సలహాలు', pageSub: 'పొలంలో తరచూ ఎదురయ్యే సమస్యలకు ఆచరణాత్మక పరిష్కారాలు: పురుగులు, తెగుళ్లు, నేల, నీరు.',
@@ -38,6 +40,10 @@ export const T = {
     whatsapp: 'వాట్సాప్ సందేశం పంపండి', call: 'ఫోన్ చేయండి', related: 'ఈ అంశంపై మరిన్ని సలహాలు', updated: 'నవీకరించబడింది',
     onlyEnglish: 'ఈ వ్యాసం ప్రస్తుతం ఇంగ్లీష్‌లో మాత్రమే అందుబాటులో ఉంది.', notFound: 'వ్యాసం దొరకలేదు',
     disclaimer: 'ఇది సాధారణ సమాచారం మాత్రమే. పురుగుమందులు, మోతాదుల కోసం ఎల్లప్పుడూ మందు లేబుల్‌ను, మీ స్థానిక వ్యవసాయ అధికారి సలహాను పాటించండి.',
+    recipesTitle: 'వంటకాలు & ఆరోగ్యం', recipesSub: 'సులభమైన వంటకాలు, వంట చిట్కాలు, సహజంగా పండించిన ఆహారం మంచితనం.',
+    backRecipes: 'అన్ని వంటకాలు', recipeHelp: 'దీన్ని ఇంట్లో వండాలనుకుంటున్నారా?', recipeHelpText: 'మా పొలం నుండి తాజా, సహజంగా పండించిన ఉత్పత్తులను ఆర్డర్ చేయండి. వాట్సాప్‌లో సందేశం పంపండి లేదా ఆన్‌లైన్‌లో కొనండి.',
+    recipeOrder: 'వాట్సాప్‌లో ఆర్డర్ చేయండి', shop: 'ఇప్పుడే కొనండి', recipeDisclaimer: 'ఇది ఆహారం, వంట గురించి సాధారణ సమాచారం మాత్రమే, వైద్య సలహా కాదు.',
+    relatedRecipes: 'మరిన్ని వంటకాలు',
   },
 };
 
@@ -66,7 +72,7 @@ export function langToggle(current) {
 
 export function postCard(post, lang) {
   const l = localize(post, lang);
-  return `<a class="post-card" href="/blog/${encodeURIComponent(post.slug)}${lang === 'te' ? '?lang=te' : ''}">
+  return `<a class="post-card" href="${postPath(post)}">
     <img src="${esc(post.image || '/images/placeholder.svg')}" alt="" loading="lazy" width="400" height="250">
     <div class="post-card-body" lang="${l.lang}">
       <span class="topic">${esc(TOPICS[post.category]?.[l.lang] || post.category)}</span>
